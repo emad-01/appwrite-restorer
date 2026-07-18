@@ -1,14 +1,30 @@
-name: Restore Appwrite Project
+name: Restore Appwrite Projects
 
 on:
   schedule:
-    - cron: '0 0 */7 * *'
+    - cron: '0 0 */7 * *'  # هر 7 روز یکبار
   workflow_dispatch:
 
 jobs:
   restore:
     runs-on: ubuntu-latest
-    
+    strategy:
+      matrix:
+        account:
+          - id: 1
+            email_secret: EMAIL_1
+            password_secret: PASSWORD_1
+            url_secret: PROJECT_URL_1
+          - id: 2
+            email_secret: EMAIL_2
+            password_secret: PASSWORD_2
+            url_secret: PROJECT_URL_2
+          - id: 3
+            email_secret: EMAIL_3
+            password_secret: PASSWORD_3
+            url_secret: PROJECT_URL_3
+      fail-fast: false  # اگر یکی fail شد، بقیه ادامه دهند
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,17 +39,17 @@ jobs:
           pip install playwright
           playwright install chromium
 
-      - name: Run Restore
+      - name: Run Restore for Account ${{ matrix.account.id }}
         env:
-          APPWRITE_EMAIL: ${{ secrets.APPWRITE_EMAIL }}
-          APPWRITE_PASSWORD: ${{ secrets.APPWRITE_PASSWORD }}
-          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          APPWRITE_EMAIL: ${{ secrets[matrix.account.email_secret] }}
+          APPWRITE_PASSWORD: ${{ secrets[matrix.account.password_secret] }}
+          PROJECT_URL: ${{ secrets[matrix.account.url_secret] }}
         run: python restore.py
 
-      - name: Upload Screenshots
+      - name: Upload Screenshots for Account ${{ matrix.account.id }}
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ github.run_id }}
+          name: screenshots-account-${{ matrix.account.id }}-${{ github.run_id }}
           path: '*.png'
           retention-days: 7
