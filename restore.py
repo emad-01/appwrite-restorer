@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Appwrite Auto Restorer - ساده و قابل اعتماد
-"""
-
 import asyncio
 import os
 import sys
@@ -14,7 +10,7 @@ PROJECT_URL = os.getenv("PROJECT_URL")
 
 async def main():
     if not all([EMAIL, PASSWORD, PROJECT_URL]):
-        print("❌ لطفاً متغیرهای محیطی را تنظیم کنید")
+        print("❌ متغیرهای محیطی تنظیم نشده‌اند")
         sys.exit(1)
 
     print(f"🚀 شروع بازیابی برای: {EMAIL}")
@@ -26,7 +22,6 @@ async def main():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         )
 
-        # حذف علائم automation
         await context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         """)
@@ -34,39 +29,68 @@ async def main():
         page = await context.new_page()
 
         try:
-            # ۱. ورود به Appwrite
             print("🔐 در حال ورود...")
             await page.goto("https://cloud.appwrite.io/console/login", wait_until="networkidle")
 
+            # پر کردن فرم
             await page.fill('input[type="email"]', EMAIL)
             await page.fill('input[type="password"]', PASSWORD)
+            
+            print("⏳ در حال ارسال فرم...")
             await page.click('button[type="submit"]')
 
-            # انتظار برای ورود موفق
-            await page.wait_for_url("**/console/**", timeout=30000)
-            print("✅ ورود موفقیت‌آمیز")
+            # انتظار برای تغییر URL
+            try:
+                await page.wait_for_url("**/console/**", timeout=30000)
+                print("✅ ورود موفقیت‌آمیز - URL تغییر کرد")
+            except:
+                # اگر URL تغییر نکرد، بررسی خطا
+                current_url = page.url
+                print(f"⚠️ URL فعلی: {current_url}")
+                
+                # بررسی وجود reCAPTCHA
+                recaptcha = await page.query_selector('iframe[src*="recaptcha"]')
+                if recaptcha:
+                    print("🤖 reCAPTCHA شناسایی شد!")
+                
+                # بررسی پیام خطا
+                error_msg = await page.query_selector('.alert, .error, [role="alert"]')
+                if error_msg:
+                    text = await error_msg.text_content()
+                    print(f"❌ پیام خطا: {text}")
+                
+                await page.screenshot(path="login_error.png")
+                raise Exception("ورود ناموفق بود")
 
-            # ۲. رفتن به صفحه پروژه
             print("📂 در حال باز کردن پروژه...")
             await page.goto(PROJECT_URL, wait_until="networkidle")
             await asyncio.sleep(3)
 
-            # ۳. کلیک روی Restore project
+            # اسکرین‌شات از صفحه پروژه
+            await page.screenshot(path="project_page.png")
+            print("📸 اسکرین‌شات صفحه پروژه ذخیره شد")
+
             print("🔄 در حال جستجوی دکمه Restore...")
             restore_btn = await page.query_selector('button:has-text("Restore project")')
 
             if restore_btn:
+                print("✅ دکمه Restore project یافت شد - در حال کلیک...")
                 await restore_btn.click()
                 await asyncio.sleep(5)
+                await page.screenshot(path="after_restore.png")
                 print("✅ پروژه با موفقیت بازیابی شد!")
             else:
-                # بررسی آیا قبلاً فعال است
                 active = await page.query_selector('text="Active"')
-                if active:
-                    print("✅ پروژه قبلاً فعال است")
+                running = await page.query_selector('text="Running"')
+                if active or running:
+                    print("✅ پروژه قبلاً فعال است - نیازی به Restore نیست")
                 else:
-                    print("⚠️ دکمه Restore یافت نشد - اسکرین‌شات ذخیره شد")
-                    await page.screenshot(path="screenshot.png")
+                    print("⚠️ دکمه Restore یافت نشد - وضعیت نامشخص")
+                    # لیست همه دکمه‌ها برای دیباگ
+                    buttons = await page.query_selector_all('button')
+                    for i, btn in enumerate(buttons[:10]):
+                        text = await btn.text_content()
+                        print(f"  دکمه {i}: {text.strip()}")
 
         except Exception as e:
             print(f"❌ خطا: {e}")
