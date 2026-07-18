@@ -224,17 +224,19 @@ Appwrite Auto Restorer
 Appwrite Auto Restorer
 """
 
-    send_email_notification(subject, body)
-    
-    # اگر پروژه قبلاً فعال بود، خطا نده
-    if status == "already_active":
-        print("✅ پروژه فعال بود - Exit Code 0")
-        sys.exit(0)
-    elif status == "restored":
-        print("✅ بازیابی موفق - Exit Code 0")
+        # ارسال ایمیل فقط وقتی که پروژه واقعاً بازیابی شد
+    if status == "restored":
+        send_email_notification(subject, body)
+        print("📧 ایمیل ارسال شد - پروژه از حالت Paused خارج شد")
+    elif status == "already_active":
+        print("ℹ️ پروژه قبلاً فعال بود - نیازی به ایمیل نیست")
+    else:
+        print("❌ خطا در بازیابی - ایمیل خطا ارسال نمی‌شود")
+
+    # Exit codes
+    if status in ["restored", "already_active"]:
         sys.exit(0)
     else:
-        print("❌ خطا - Exit Code 1")
         sys.exit(1)
 
 if __name__ == "__main__":
