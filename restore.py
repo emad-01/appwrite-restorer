@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import asyncio
-import json
 import os
 import sys
 from playwright.async_api import async_playwright
@@ -44,27 +43,20 @@ async def main():
             await page.goto("https://cloud.appwrite.io/console/login", wait_until="networkidle")
             await asyncio.sleep(2)
 
-            # پر کردن فرم
             print("📝 پر کردن فرم...")
             await page.fill('input[type="email"]', EMAIL)
             await page.fill('input[type="password"]', PASSWORD)
             await page.screenshot(path="before_login.png")
 
-            # کلیک روی Sign in
             print("🖱️ کلیک روی Sign in...")
             await page.click('button[type="submit"]')
             
-            # ⏰ مهم: صبر برای پردازش درخواست AJAX
             print("⏳ انتظار برای پاسخ سرور...")
-            await asyncio.sleep(5)  # 5 ثانیه صبر
+            await asyncio.sleep(5)
             
-            # بررسی URL
-            current_url = page.url
-            print(f"📍 URL بعد از 5 ثانیه: {current_url}")
-            
-            # اگر هنوز روی Login هستیم، بیشتر صبر کنیم
-            max_wait = 30  # حداکثر 30 ثانیه
+            max_wait = 30
             waited = 5
+            current_url = page.url
             
             while "login" in current_url and waited < max_wait:
                 await asyncio.sleep(2)
@@ -77,23 +69,10 @@ async def main():
 
             if "login" in current_url:
                 print("❌ بعد از 30 ثانیه هنوز روی Login هستیم!")
-                
-                # بررسی پیام خطا در صفحه
-                error_el = await page.query_selector('text="Invalid credentials"')
-                if error_el:
-                    print("❌ ایمیل یا پسورد اشتباه است!")
-                
-                # بررسی آیا دکمه Sign in disabled است (یعنی در حال پردازش)
-                btn = await page.query_selector('button[type="submit"]')
-                if btn:
-                    disabled = await btn.is_disabled()
-                    print(f"🔘 دکمه Sign in disabled: {disabled}")
-                
                 sys.exit(1)
 
             print("✅ ورود موفقیت‌آمیز!")
 
-            # رفتن به پروژه
             print(f"📂 باز کردن پروژه...")
             await page.goto(PROJECT_URL, wait_until="networkidle")
             await asyncio.sleep(3)
@@ -106,7 +85,6 @@ async def main():
                 print("❌ به Login redirect شدیم!")
                 sys.exit(1)
 
-            # جستجوی دکمه Restore
             print("🔄 جستجوی دکمه Restore...")
             restore_btn = await page.query_selector('button:has-text("Restore project")')
 
@@ -119,7 +97,7 @@ async def main():
             else:
                 page_content = await page.content()
                 if "Project paused" in page_content:
-                    print("⚠️ پروژه Paused است ولی دکمه Restore یافت نشد")
+                    print("⚠️ پروژه Paused ولی دکمه یافت نشد")
                     await page.screenshot(path="paused_not_found.png", full_page=True)
                 elif "Active" in page_content:
                     print("✅ پروژه قبلاً فعال است")
