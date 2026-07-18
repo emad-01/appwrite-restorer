@@ -3,7 +3,6 @@ name: Restore Appwrite Project
 on:
   schedule:
     - cron: '0 0 */7 * *'
-  
   workflow_dispatch:
 
 jobs:
@@ -13,6 +12,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Restore cookies cache
+        uses: actions/cache@v4
+        with:
+          path: appwrite_cookies.json
+          key: appwrite-cookies-${{ github.run_id }}
+          restore-keys: |
+            appwrite-cookies-
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,9 +38,16 @@ jobs:
           PROJECT_URL: ${{ secrets.PROJECT_URL }}
         run: python restore.py
 
+      - name: Save cookies cache
+        uses: actions/cache@v4
+        with:
+          path: appwrite_cookies.json
+          key: appwrite-cookies-${{ github.run_id }}
+
       - name: Upload Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ github.run_id }}
           path: '*.png'
+          retention-days: 7
