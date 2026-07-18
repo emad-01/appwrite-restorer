@@ -13,14 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore cookies cache
-        uses: actions/cache@v4
-        with:
-          path: appwrite_cookies.json
-          key: appwrite-cookies-${{ github.run_id }}
-          restore-keys: |
-            appwrite-cookies-
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -37,12 +29,6 @@ jobs:
           APPWRITE_PASSWORD: ${{ secrets.APPWRITE_PASSWORD }}
           PROJECT_URL: ${{ secrets.PROJECT_URL }}
         run: python restore.py
-
-      - name: Save cookies cache
-        uses: actions/cache@v4
-        with:
-          path: appwrite_cookies.json
-          key: appwrite-cookies-${{ github.run_id }}
 
       - name: Upload Screenshots
         if: always()
