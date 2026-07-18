@@ -2,6 +2,7 @@
 import asyncio
 import os
 import sys
+import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -12,11 +13,9 @@ PASSWORD = os.getenv("APPWRITE_PASSWORD", "").strip()
 PROJECT_URL = os.getenv("PROJECT_URL", "").strip()
 ACCOUNT_ID = os.getenv("ACCOUNT_ID", "unknown")
 
-# ایمیل اطلاع‌رسانی
 NOTIFY_EMAIL = "ali94khodaei@gmail.com"
-# برای ارسال ایمیل نیاز به SMTP دارید - می‌توانید از Gmail App Password استفاده کنید
-SMTP_USER = os.getenv("SMTP_USER", "").strip()  # مثلاً: your-email@gmail.com
-SMTP_PASS = os.getenv("SMTP_PASS", "").strip()   # App Password Gmail
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASS = os.getenv("SMTP_PASS", "").strip()
 
 def send_email_notification(subject, body):
     """ارسال ایمیل اطلاع‌رسانی"""
@@ -56,6 +55,7 @@ async def main():
     project_name = "Unknown"
     status = "failed"
     error_msg = ""
+    is_paused = False
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -101,7 +101,7 @@ async def main():
                 await asyncio.sleep(2)
                 waited += 2
                 current_url = page.url
-                print(f"⏳ منتظر... ({waited}s) URL: {current_url}")
+                print(f"⏳ منتظر... ({waited}s)")
             
             print(f"📍 URL نهایی: {current_url}")
 
@@ -118,52 +118,64 @@ async def main():
             
             current_url = page.url
             print(f"📍 URL پروژه: {current_url}")
+            await page.screenshot(path="project_page.png")
 
             if "login" in current_url:
                 print("❌ به Login redirect شدیم!")
                 error_msg = "Session منقضی شد"
                 sys.exit(1)
 
-            # استخراج نام پروژه از صفحه
-            title_el = await page.query_selector('h1, .project-name, [data-testid="project-name"]')
+            # استخراج نام پروژه
+            title_el = await page.query_selector('h1')
             if title_el:
                 project_name = await title_el.text_content()
                 project_name = project_name.strip()
             else:
-                # از URL استخراج کنیم
-                import re
                 match = re.search(r'project-([a-zA-Z0-9]+)', PROJECT_URL)
                 if match:
                     project_name = f"Project-{match.group(1)[:8]}"
 
             print(f"📋 نام پروژه: {project_name}")
 
-            print("🔄 جستجوی دکمه Restore...")
-            restore_btn = await page.query_selector('button:has-text("Restore project")')
+            # بررسی محتوای صفحه برای تشخیص وضعیت
+            page_content = await page.content()
+            page_text = await page.inner_text('body')
 
-            if restore_btn:
-                print("✅ دکمه Restore یافت شد!")
-                await restore_btn.click()
-                await asyncio.sleep(5)
-                
-                # بررسی موفقیت
-                page_content = await page.content()
-                if "Project paused" not in page_content:
-                    status = "restored"
-                    print("✅ پروژه بازیابی شد!")
-                else:
-                    status = "failed"
-                    error_msg = "بازیابی ناموفق بود"
-                    print("❌ بازیابی ناموفق")
-            else:
-                page_content = await page.content()
-                if "Active" in page_content or "Running" in page_content:
-                    status = "already_active"
-                    print("✅ پروژه قبلاً فعال است")
+            # بررسی آیا پروژه Paused است
+            if "Project paused" in page_content or "paused due to inactivity" in page_content:
+                is_paused = True
+                print("⏸️ پروژه در حالت Paused است")
+
+                print("🔄 جستجوی دکمه Restore...")
+                restore_btn = await page.query_selector('button:has-text("Restore project")')
+
+                if restore_btn:
+                    print("✅ دکمه Restore یافت شد!")
+                    await restore_btn.click()
+                    await asyncio.sleep(5)
+                    
+                    # بررسی موفقیت
+                    new_content = await page.content()
+                    if "Project paused" not in new_content:
+                        status = "restored"
+                        print("✅ پروژه با موفقیت بازیابی شد!")
+                    else:
+                        status = "failed"
+                        error_msg = "بازیابی ناموفق بود"
+                        print("❌ بازیابی ناموفق")
                 else:
                     status = "failed"
                     error_msg = "دکمه Restore یافت نشد"
                     print("⚠️ دکمه Restore یافت نشد")
+            else:
+                # پروژه Paused نیست
+                is_paused = False
+                if "Active" in page_text or "Running" in page_text:
+                    status = "already_active"
+                    print("✅ پروژه قبلاً فعال است - نیازی به Restore نیست")
+                else:
+                    status = "already_active"
+                    print("ℹ️ پروژه متوقف نیست - وضعیت: فعال")
 
         except Exception as e:
             error_msg = str(e)
@@ -172,41 +184,39 @@ async def main():
             await browser.close()
             print("🔒 تمام")
 
-    # ارسال ایمیل اطلاع‌رسانی
+    # ارسال ایمیل
     if status == "restored":
         subject = f"✅ Appwrite: پروژه '{project_name}' بازیابی شد"
         body = f"""سلام،
 
-پروژه '{project_name}' با موفقیت از حالت تعلیق (Paused) خارج شد.
+پروژه '{project_name}' با موفقیت از حالت تعلیق خارج شد.
 
 🔹 اکانت: {EMAIL}
 🔹 وضعیت: ✅ بازیابی موفق
-🔹 زمان: {asyncio.get_event_loop().time()}
 
 با احترام،
 Appwrite Auto Restorer
 """
     elif status == "already_active":
-        subject = f"ℹ️ Appwrite: پروژه '{project_name}' قبلاً فعال است"
+        subject = f"ℹ️ Appwrite: پروژه '{project_name}' فعال است"
         body = f"""سلام،
 
-پروژه '{project_name}' نیازی به بازیابی نداشت (قبلاً فعال بود).
+پروژه '{project_name}' نیازی به بازیابی نداشت.
 
 🔹 اکانت: {EMAIL}
-🔹 وضعیت: ℹ️ قبلاً فعال
+🔹 وضعیت: ℹ️ قبلاً فعال/در حال اجرا
 
 با احترام،
 Appwrite Auto Restorer
 """
     else:
-        subject = f"❌ Appwrite: خطا در بازیابی '{project_name}'"
+        subject = f"❌ Appwrite: خطا در '{project_name}'"
         body = f"""سلام،
 
-متأسفانه بازیابی پروژه '{project_name}' با خطا مواجه شد.
+بازیابی پروژه '{project_name}' با خطا مواجه شد.
 
 🔹 اکانت: {EMAIL}
-🔹 وضعیت: ❌ خطا
-🔹 جزئیات: {error_msg}
+🔹 خطا: {error_msg}
 
 لطفاً دستی بررسی کنید.
 
@@ -216,7 +226,15 @@ Appwrite Auto Restorer
 
     send_email_notification(subject, body)
     
-    if status == "failed":
+    # اگر پروژه قبلاً فعال بود، خطا نده
+    if status == "already_active":
+        print("✅ پروژه فعال بود - Exit Code 0")
+        sys.exit(0)
+    elif status == "restored":
+        print("✅ بازیابی موفق - Exit Code 0")
+        sys.exit(0)
+    else:
+        print("❌ خطا - Exit Code 1")
         sys.exit(1)
 
 if __name__ == "__main__":
