@@ -1,0 +1,39 @@
+name: Restore Appwrite Project
+
+on:
+  schedule:
+    - cron: '0 0 */7 * *'
+  
+  workflow_dispatch:
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install chromium
+
+      - name: Run Restore
+        env:
+          APPWRITE_EMAIL: ${{ secrets.APPWRITE_EMAIL }}
+          APPWRITE_PASSWORD: ${{ secrets.APPWRITE_PASSWORD }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+        run: python restore.py
+
+      - name: Upload Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: '*.png'
