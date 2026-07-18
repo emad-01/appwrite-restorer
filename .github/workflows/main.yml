@@ -1,8 +1,9 @@
-name: Restore Appwrite Projects
+name: Restore Appwrite Projects Daily
 
 on:
   schedule:
-    - cron: '0 0 */7 * *'  # هر 7 روز یکبار
+    # هر روز ساعت 8:00 صبح ایران = 4:30 UTC
+    - cron: '30 4 * * *'
   workflow_dispatch:
 
 jobs:
@@ -23,7 +24,7 @@ jobs:
             email_secret: EMAIL_3
             password_secret: PASSWORD_3
             url_secret: PROJECT_URL_3
-      fail-fast: false  # اگر یکی fail شد، بقیه ادامه دهند
+      fail-fast: false
 
     steps:
       - name: Checkout
@@ -44,6 +45,9 @@ jobs:
           APPWRITE_EMAIL: ${{ secrets[matrix.account.email_secret] }}
           APPWRITE_PASSWORD: ${{ secrets[matrix.account.password_secret] }}
           PROJECT_URL: ${{ secrets[matrix.account.url_secret] }}
+          ACCOUNT_ID: ${{ matrix.account.id }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
         run: python restore.py
 
       - name: Upload Screenshots for Account ${{ matrix.account.id }}
@@ -52,4 +56,4 @@ jobs:
         with:
           name: screenshots-account-${{ matrix.account.id }}-${{ github.run_id }}
           path: '*.png'
-          retention-days: 7
+          retention-days: 3
